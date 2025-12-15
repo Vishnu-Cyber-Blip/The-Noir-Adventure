@@ -1,5 +1,5 @@
 {
-  "name": "Copy of The Noir Adventure",
+  "name": "The Noir Adventure V2",
   "description": "A procedurally generated voice-controlled text adventure inspired by classic noir horror.",
   "requestFramePermissions": [
     "microphone"

@@ -21,8 +21,8 @@ const getAudioContext = () => {
 const getNoiseBuffer = (ctx: AudioContext) => {
     const w = window as any;
     if (!w.__noiseBuffer) {
-        // Create 50ms of white noise
-        const bufferSize = ctx.sampleRate * 0.05; 
+        // Create 100ms of white noise
+        const bufferSize = ctx.sampleRate * 0.1; 
         const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < bufferSize; i++) {
@@ -33,7 +33,7 @@ const getNoiseBuffer = (ctx: AudioContext) => {
     return w.__noiseBuffer as AudioBuffer;
 };
 
-const playTypewriterSound = () => {
+const playTypewriterSound = (char: string) => {
     try {
         const ctx = getAudioContext();
         if (!ctx) return;
@@ -43,25 +43,53 @@ const playTypewriterSound = () => {
         }
 
         const t = ctx.currentTime;
+        const isSpace = char === ' ';
+        const isReturn = char === '\n';
         
-        // Mechanical "thock" (Filtered Noise)
+        // 1. The "Click" (High frequency mechanical snap for keys, absent for space)
+        if (!isSpace) {
+            const clickOsc = ctx.createOscillator();
+            clickOsc.type = 'square';
+            // Randomize pitch slightly. Return key is lower "ka-chunk"
+            clickOsc.frequency.setValueAtTime(isReturn ? 150 : 800 + Math.random() * 200, t); 
+            
+            const clickGain = ctx.createGain();
+            clickGain.gain.setValueAtTime(0.02, t);
+            clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+            
+            // Highpass filter to make it crisp
+            const clickFilter = ctx.createBiquadFilter();
+            clickFilter.type = 'highpass';
+            clickFilter.frequency.value = 2000;
+
+            clickOsc.connect(clickFilter);
+            clickFilter.connect(clickGain);
+            clickGain.connect(ctx.destination);
+            
+            clickOsc.start(t);
+            clickOsc.stop(t + 0.05);
+        }
+
+        // 2. The "Thud" (Mechanical body sound - present for all keys)
         const noiseSource = ctx.createBufferSource();
         noiseSource.buffer = getNoiseBuffer(ctx);
         
         const noiseFilter = ctx.createBiquadFilter();
-        noiseFilter.type = 'lowpass';
-        // Randomize tone slightly for realism
-        noiseFilter.frequency.setValueAtTime(600 + Math.random() * 200, t); 
+        noiseFilter.type = 'bandpass';
+        // Different resonance for spacebar
+        noiseFilter.frequency.setValueAtTime(isSpace ? 300 : 600 + Math.random() * 100, t); 
+        noiseFilter.Q.value = 1;
         
         const noiseGain = ctx.createGain();
-        // Vary volume slightly
-        noiseGain.gain.setValueAtTime(0.03 + Math.random() * 0.02, t); 
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+        noiseGain.gain.setValueAtTime(isSpace ? 0.08 : 0.05, t); 
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, t + (isSpace ? 0.15 : 0.08));
         
         noiseSource.connect(noiseFilter);
         noiseFilter.connect(noiseGain);
         noiseGain.connect(ctx.destination);
+        
         noiseSource.start(t);
+        noiseSource.stop(t + 0.2);
 
     } catch (e) {
         // Silently fail if audio is blocked or unsupported
@@ -89,25 +117,23 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
         setDisplayedText((prev) => prev + char);
         indexRef.current++;
         
-        // Play sound for non-whitespace characters
-        if (char.trim() !== '') {
-            playTypewriterSound();
-        }
+        // Play sound
+        playTypewriterSound(char);
 
         // --- Calculate Dynamic Delay ---
         let delay = speed;
         
         // 1. Human Imperfection: Randomize speed by +/- 50%
-        const variance = (Math.random() * 1.0) + 0.5; // Multiplier between 0.5x and 1.5x
+        const variance = (Math.random() * 0.8) + 0.6; 
         delay *= variance;
 
         // 2. Contextual Pauses
         if (char === '.' || char === '?' || char === '!') {
-            delay += 500; // End of sentence reflection
+            delay += 400; // End of sentence reflection
         } else if (char === ',' || char === ';') {
-            delay += 250; // Mid-sentence pause
+            delay += 200; // Mid-sentence pause
         } else if (char === '\n') {
-            delay += 600; // Carriage return thought process
+            delay += 500; // Carriage return thought process
         } else if (char === ' ') {
             delay += 10; // Slight pause between words
         }

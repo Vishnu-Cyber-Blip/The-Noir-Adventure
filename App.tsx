@@ -80,6 +80,8 @@ function App() {
   // Auto-scroll
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const hasApiKey = Boolean(process.env.API_KEY || (userApiKey && userApiKey.trim().length > 10));
+
   useEffect(() => {
     if (process.env.API_KEY) {
       initializeGemini(process.env.API_KEY);
@@ -188,6 +190,10 @@ function App() {
   // --- GAME LOGIC ---
 
   const prepareNewGame = () => {
+    if (!hasApiKey) {
+        setTvChannel('CONFIG');
+        return;
+    }
     setTvChannel('SETUP');
     setErrorMsg(null);
   };
@@ -199,8 +205,9 @@ function App() {
     // Prioritize Env Key, then User Key
     const keyToUse = process.env.API_KEY || userApiKey;
 
-    if (!keyToUse.trim()) {
-        setErrorMsg("API Key Missing. Check Config Channel.");
+    if (!keyToUse || keyToUse.trim().length === 0) {
+        setTvChannel('CONFIG');
+        setErrorMsg("CONFIGURATION REQUIRED: MISSING API KEY");
         setIsProcessing(false);
         return;
     }
@@ -227,7 +234,7 @@ function App() {
 
     } catch (e) {
       console.error(e);
-      setErrorMsg("Signal Lost. Check Connection.");
+      setErrorMsg("Signal Lost. Check Key Configuration.");
     } finally {
       setIsProcessing(false);
     }
@@ -360,7 +367,7 @@ function App() {
 
   const renderTVScreen = () => {
     // Helper for retro buttons
-    const TvButton = ({ onClick, label, danger = false }: { onClick: () => void, label: string, danger?: boolean }) => (
+    const TvButton = ({ onClick, label, danger = false, highlight = false }: { onClick: () => void, label: string, danger?: boolean, highlight?: boolean }) => (
         <button 
             onClick={onClick}
             className={`
@@ -368,11 +375,14 @@ function App() {
                 transition-all duration-75 active:bg-zinc-800 active:border-zinc-400
                 ${danger 
                     ? 'border-red-900/50 text-red-900 hover:bg-red-900 hover:text-black hover:border-red-500' 
+                    : highlight
+                    ? 'border-blue-900/50 text-blue-400 hover:bg-blue-900/20 hover:text-blue-200 hover:border-blue-500'
                     : 'border-zinc-800 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 hover:border-zinc-500'
                 }
             `}
         >
             {label}
+            {highlight && <span className="absolute -right-2 -top-2 w-3 h-3 bg-blue-500 rounded-full animate-ping" />}
         </button>
     );
 
@@ -408,14 +418,18 @@ function App() {
                                 <div className="flex flex-col gap-4 animate-fade-in">
                                     <TvButton onClick={prepareNewGame} label="NEW GAME" />
                                     
-                                    {hasSave && (
+                                    {hasSave && hasApiKey && (
                                         <>
                                             <TvButton onClick={handleLoad} label="CONTINUE TAPE" />
                                             <TvButton onClick={() => setTvChannel('TIMELINE')} label="VIEW TIMELINE" />
                                         </>
                                     )}
                                     
-                                    <TvButton onClick={() => setTvChannel('CONFIG')} label="CONFIG CHANNEL" />
+                                    <TvButton 
+                                        onClick={() => setTvChannel('CONFIG')} 
+                                        label={hasApiKey ? "CONFIG CHANNEL" : "SYSTEM CONFIG (REQUIRED)"} 
+                                        highlight={!hasApiKey}
+                                    />
                                     
                                     {hasSave && (
                                         <div className="pt-4 border-t border-zinc-900 mt-2">
@@ -468,8 +482,20 @@ function App() {
                                 <div className="flex flex-col gap-4 text-left animate-fade-in w-full bg-black/80 p-6 border border-zinc-800">
                                     <h3 className="font-retro text-zinc-500 text-xl border-b border-zinc-800 pb-2 mb-2">SYSTEM CONFIG</h3>
                                     
-                                    <div className="mb-4">
-                                        <label className="block font-retro text-zinc-600 mb-1">API KEY STATUS</label>
+                                    <div className="mb-2">
+                                        <p className="text-zinc-400 text-xs font-serif leading-relaxed mb-4">
+                                            To connect to the Noir Chronicles neural network, a <strong className="text-zinc-200">Google Gemini API Key</strong> is required.
+                                        </p>
+                                        <a 
+                                            href="https://aistudio.google.com/app/apikey" 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="block text-center bg-blue-900/20 border border-blue-900/50 text-blue-400 hover:bg-blue-900/40 py-2 font-retro mb-4 text-lg animate-pulse"
+                                        >
+                                            [ GET API KEY HERE ]
+                                        </a>
+
+                                        <label className="block font-retro text-zinc-600 mb-1">INPUT KEY:</label>
                                         {process.env.API_KEY ? (
                                             <div className="flex items-center gap-2 text-green-700 font-retro border border-green-900/30 bg-green-900/10 p-2">
                                                 <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></span>
@@ -480,17 +506,17 @@ function App() {
                                                 type="password"
                                                 value={userApiKey}
                                                 onChange={(e) => setUserApiKey(e.target.value)}
-                                                placeholder="ENTER GEMINI API KEY..."
+                                                placeholder="Paste key here (AIza...)"
                                                 className="w-full bg-zinc-900 border border-zinc-800 p-2 font-mono text-zinc-300 focus:border-zinc-500 outline-none"
                                             />
                                         )}
-                                        <p className="text-[10px] text-zinc-700 font-mono mt-1">
-                                            {process.env.API_KEY ? "Using environment key." : "Key required for connection."}
+                                        <p className="text-[10px] text-zinc-700 font-mono mt-2">
+                                            Keys are stored only in local memory during the session.
                                         </p>
                                     </div>
 
                                     <div className="flex justify-between mt-4">
-                                        <button onClick={() => setTvChannel('MENU')} className="font-retro text-zinc-500 hover:text-zinc-300">{'< BACK'}</button>
+                                        <button onClick={() => setTvChannel('MENU')} className="font-retro text-zinc-500 hover:text-zinc-300">{'< RETURN TO MENU'}</button>
                                     </div>
                                 </div>
                             )}
@@ -556,7 +582,7 @@ function App() {
                             )}
                             
                             {errorMsg && (
-                                <div className="mt-4 text-red-700 font-retro text-sm bg-red-900/10 p-2 border border-red-900/20">
+                                <div className="mt-4 text-red-700 font-retro text-sm bg-red-900/10 p-2 border border-red-900/20 animate-shake">
                                     ERROR: {errorMsg}
                                 </div>
                             )}
